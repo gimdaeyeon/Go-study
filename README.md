@@ -98,7 +98,7 @@ const (
 3. 정수형 타입
    - int, int8, int16, int32, int64
    - uint, uint8, uint16, uint32, uint64, uintptr
-4. Float 및 복수수 타입
+4. Float 및 복소수 타입
    - float32, float64, complex64, complex128
 5. 기타 타입
    - byte: unit8과 동일하며 바이트 코드에 사용
