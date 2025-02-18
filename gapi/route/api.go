@@ -10,10 +10,13 @@ import (
 func Router() *gin.Engine {
 	var app *gin.Engine = gin.New()
 
-	app.GET("/svc1/req1", svc1.Req1)
-	app.GET("/svc1/req2", svc1.Req2)
-	app.GET("/svc2/req1", svc2.Req1)
-	app.GET("/svc2/req2", svc2.Req2)
+	app_svc1 := app.Group("/svc1")
+	app_svc1.GET("/req1", svc1.Req1)
+	app_svc1.GET("/req2", svc1.Req2)
+
+	app_svc2 := app.Group("/svc2")
+	app_svc2.GET("/req1", svc2.Req1)
+	app_svc2.GET("/req2", svc2.Req2)
 
 	return app
 }
