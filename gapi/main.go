@@ -1,6 +1,7 @@
 package main
 
 import (
+	"gapi/model"
 	"gapi/route"
 	"log"
 	"os"
@@ -23,6 +24,9 @@ func main() {
 	if port == "" {
 		log.Fatalf("PORT is not set in the .env file")
 	}
+
+	model.Init()
+	defer model.DBConn.Close()
 
 	// app := gin.Default()
 	app := route.Router()
