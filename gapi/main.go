@@ -1,8 +1,7 @@
 package main
 
 import (
-	"gapi/controller/svc1"
-	"gapi/controller/svc2"
+	"gapi/route"
 	"log"
 	"os"
 
@@ -25,18 +24,14 @@ func main() {
 		log.Fatalf("PORT is not set in the .env file")
 	}
 
-	app := gin.Default()
+	// app := gin.Default()
+	app := route.Router()
 
 	app.GET("/", func(c *gin.Context) {
 		c.JSON(200, gin.H{
 			"hello": "world",
 		})
 	})
-
-	app.GET("/svc1/req1", svc1.Req1)
-	app.GET("/svc1/req2", svc1.Req2)
-	app.GET("/svc2/req1", svc2.Req1)
-	app.GET("/svc2/req2", svc2.Req2)
 
 	app.Run("0.0.0.0:" + port)
 }
