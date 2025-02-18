@@ -1,14 +1,14 @@
 package main
 
 import (
+	"gapi/controller/svc1"
+	"gapi/controller/svc2"
 	"log"
 	"os"
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 )
-
-// import "github.com/joho/godotenv"
 
 func main() {
 	// .env 파일 로드
@@ -26,10 +26,17 @@ func main() {
 	}
 
 	app := gin.Default()
+
 	app.GET("/", func(c *gin.Context) {
 		c.JSON(200, gin.H{
 			"hello": "world",
 		})
 	})
+
+	app.GET("/svc1/req1", svc1.Req1)
+	app.GET("/svc1/req2", svc1.Req2)
+	app.GET("/svc2/req1", svc2.Req1)
+	app.GET("/svc2/req2", svc2.Req2)
+
 	app.Run("0.0.0.0:" + port)
 }
