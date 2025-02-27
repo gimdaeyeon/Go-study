@@ -2,13 +2,20 @@ package main
 
 import (
 	"fmt"
-	"learngo/accounts"
+	"learngo/mydict"
 )
 
 func main() {
-	account := accounts.NewAccount("머연")
-	account.Deposit(10)
+	dict := mydict.Dictionary{"first": "First word"}
+	baseWord := "hello"
+	dict.Add(baseWord, "First")
+	dict.Search(baseWord)
+	dict.Delete(baseWord)
 
-	fmt.Println(account)
+	word, err := dict.Search(baseWord)
+	if err != nil {
+		fmt.Println(err)
+	}
+	fmt.Println(word)
 
 }
