@@ -1,9 +1,11 @@
 package main
 
 import (
+	"encoding/csv"
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 
@@ -19,6 +21,7 @@ type extractedJob struct {
 }
 
 var baseURL string = "https://www.saramin.co.kr/zf_user/search/recruit?&searchword=golang"
+var viewURL string = "https://www.saramin.co.kr/zf_user/jobs/relay/view?isMypage=no&rec_idx=%s&view_type=search&searchword=golang&searchType=search&gz=1&t_ref_content=generic&t_ref=search"
 
 func main() {
 	var jobs []extractedJob
@@ -32,6 +35,30 @@ func main() {
 	for i, job := range jobs {
 		fmt.Println(i, job)
 	}
+
+	writeJobs(jobs)
+	fmt.Println("Done, extracted", len(jobs))
+}
+
+func writeJobs(jobs []extractedJob) {
+	file, err := os.Create("jobs.csv")
+	checkErr(err)
+
+	w := csv.NewWriter(file)
+	defer w.Flush()
+
+	headers := []string{"Id", "Title", "Location", "Summary", "Company"}
+
+	wErr := w.Write(headers)
+	checkErr(wErr)
+
+	for _, job := range jobs {
+		url := fmt.Sprintf(viewURL, job.id)
+		jobSlice := []string{url, job.title, job.location, job.summary, job.company}
+		jwErr := w.Write(jobSlice)
+		checkErr(jwErr)
+	}
+
 }
 
 func getPage(page int) []extractedJob {
