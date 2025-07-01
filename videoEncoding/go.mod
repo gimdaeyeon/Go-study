@@ -1,3 +1,3 @@
-module github.com/kevmo314/codec-from-scratch
+module github.com/gimdaeyeon/videoEncoding
 
-go 1.19
+go 1.24.0
