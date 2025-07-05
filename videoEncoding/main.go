@@ -2,6 +2,9 @@ package main
 
 import (
 	"flag"
+	"io"
+	"log"
+	"os"
 )
 
 // 기본적인 비디오 인코더를 만드는 방법에 대한 내용
@@ -30,7 +33,36 @@ func main() {
 
 	frames := make([][]byte, 0 ) // make를 통해 slice생성
 
+	for{
+		// stdin에서 원시 비디오 프레임을 읽는다. rgb24형식에서는 각 픽셀(r, g, b)이 1바이트이다.
+		// 따라서 프레임의 총 크기는 너비 * 높이 * 3 이다.
 
+		frame := make([]byte, width*height*3)
+
+		// 표준 입력 stdin에서 프레임을 읽는다.
+		// io.ReadFull로 정확히 프레임 크기만큼 읽어들여 frame 슬라이스에 채워 넣음
+		if _, err := io.ReadFull(os.Stdin, frame); err !=nil{
+			break;
+		}
+
+		frames = append(frames, frame)
+	}
+
+	// 이제 우리는 엄청난 양의 메모리를 사용해서 원시 비디오를 얻었다.
+
+	rawSize := size(frames)
+	log.Printf("Raw size: %d bytes",rawSize)
 
 
 }
+
+
+func size(frames [][]byte) int{
+	var size int
+	for _, frame := range frames{
+		size += len(frame);
+	}
+	return size
+}
+
+
