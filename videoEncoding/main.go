@@ -21,7 +21,6 @@ import (
 // 코드를 실행
 //   cat video.rgb24 | go run main.go
 
-
 func main() {
 	var width, height int
 
@@ -31,9 +30,9 @@ func main() {
 	flag.IntVar(&height, "height", 216, "height of the video")
 	flag.Parse() // Parse() 를 통해서 실제로 cli를 통해 선언한 값이 각 변수에 할당된다.
 
-	frames := make([][]byte, 0 ) // make를 통해 slice생성
+	frames := make([][]byte, 0) // make를 통해 slice생성
 
-	for{
+	for {
 		// stdin에서 원시 비디오 프레임을 읽는다. rgb24형식에서는 각 픽셀(r, g, b)이 1바이트이다.
 		// 따라서 프레임의 총 크기는 너비 * 높이 * 3 이다.
 
@@ -41,8 +40,8 @@ func main() {
 
 		// 표준 입력 stdin에서 프레임을 읽는다.
 		// io.ReadFull로 정확히 프레임 크기만큼 읽어들여 frame 슬라이스에 채워 넣음
-		if _, err := io.ReadFull(os.Stdin, frame); err !=nil{
-			break;
+		if _, err := io.ReadFull(os.Stdin, frame); err != nil {
+			break
 		}
 
 		frames = append(frames, frame)
@@ -51,9 +50,9 @@ func main() {
 	// 이제 우리는 엄청난 양의 메모리를 사용해서 원시 비디오를 얻었다.
 
 	rawSize := size(frames)
-	log.Printf("Raw size: %d bytes",rawSize)
+	log.Printf("Raw size: %d bytes", rawSize)
 
-	for i, frame := range frames{
+	for i, frame := range frames {
 		// 먼저, 각 프레임을 yuv420 형식으로 변환한다.
 		// 각 픽셀은 RGB24형식으로 다음과 같다.
 		// +-----------+-----------+-----------+-----------+
@@ -106,20 +105,69 @@ func main() {
 		// 추가적으로 YUV형식은 YCbCr이라고도 한다.
 		// 사실 완전히 맞는 말은 아니지만, 충분히 비슷하며 색상 공간 선택은 완전히 다른 주제이다.
 
+		// 관례적으로 바이트 슬라이스에서는
+		// 왼쪽에서 오른쪽으로 읽은 후 위에서 아래로 저장한다.
+		// 즉, i행 j열에 있는 픽셀을 찾으려면 인덱스에 있는바이트를 찾는다.
+		// (i * width + j ) * 3
 
+		// 실제로는 이미지가 역순으로 처리되므로 크게 중요하지는 않다.
+		// 중요한 것은 일관성을 유지하느 것이다.
+
+		Y := make([]byte, width*height)
+		U := make([]float64, width*height)
+		V := make([]float64, width*height)
+
+		for j := 0; j < width*height; j++ {
+			// 픽셀을 RGB에서 YUV로 변환
+			r, g, b := float64(frame[3*j]), float64(frame[3*j+1]), float64(frame[3*j+2])
+
+			// 이 계수는 ITU-R 표준에서 가져온 것이다..
+			// https://en.wikipedia.org/wiki/YUV#Y%E2%80%B2UV444_to_RGB888_conversion 참조
+
+			// 실제로 실제 계수는 표준에 따라 달라진다.
+			// 예시에서는 크게 중요하지 않다. 중요한 점은
+			// YUV로 변환하면 색상 공간을 효율적으로 다운샘플링할 수 있다는 것이다.
+
+			y := +0.299*r + 0.587*g + 0.114*b
+			u := -0.169*r + 0.331*g + 0.449*b + 128
+			v := -0.499*r + 0.418*g + 0.0813*b + 128
+
+			// YUV값을 바이트 슬라이스에 저장한다.
+			// 이 슬라이스들은 다음 단계를 조금 더 쉽게 하기 위해 분리되어 있다.
+			Y[j] = uint8(y)
+			U[j] = u
+			V[j] = v
+		}
+
+		// 이제 U와 V의 구성요소를 다운샘플링한다.
+		// 이는 U와 V구성 요소를 공유하는 4개의 픽셀을 가져와 평균화하는 과정이다.
+
+		// 다운샘플링된 U와 V구성요소를 이 슬라이스에 저장한다.
+		uDownsampled := make([]byte, width*height/4)
+		vDownsampled := make([]byte, width*height/4)
+
+		for x := 0; x < height; x += 2 {
+			for y := 0; y < width; y += 2 {
+				// 이 U와 V구성요소를 공유하는 4개 픽셀의 U 및 V 구성요소의평균을 구한다.
+				u := (U[x*width+y] + U[x*width+y+1] + U[(x+1)*width+y] + U[(x+1)*width+y+1]) / 4
+				v := (V[x*width+y] + V[x*width+y+1] + V[(x+1)*width+y] + V[(x+1)*width+y+1]) / 4
+
+				// 다운샘플링된 U와 V 구성요소를 바이트 슬라이스에 저장한다.
+				uDownsampled[x/2*width/2+y/2] = uint8(u)
+				vDownsampled[x/2*width/2+y/2] = uint8(v)
+			}
+		}
+
+		yuvFrame := make([]byte, len(Y)+len(uDownsampled)+len(vDownsampled))
 
 	}
 
-
 }
 
-
-func size(frames [][]byte) int{
+func size(frames [][]byte) int {
 	var size int
-	for _, frame := range frames{
-		size += len(frame);
+	for _, frame := range frames {
+		size += len(frame)
 	}
 	return size
 }
-
-
