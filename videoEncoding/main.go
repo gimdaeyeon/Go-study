@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"flag"
 	"io"
 	"log"
@@ -129,8 +130,8 @@ func main() {
 			// YUV로 변환하면 색상 공간을 효율적으로 다운샘플링할 수 있다는 것이다.
 
 			y := +0.299*r + 0.587*g + 0.114*b
-			u := -0.169*r + 0.331*g + 0.449*b + 128
-			v := -0.499*r + 0.418*g + 0.0813*b + 128
+			u := -0.169*r - 0.331*g + 0.449*b + 128
+			v := 0.499*r - 0.418*g - 0.0813*b + 128
 
 			// YUV값을 바이트 슬라이스에 저장한다.
 			// 이 슬라이스들은 다음 단계를 조금 더 쉽게 하기 위해 분리되어 있다.
@@ -160,6 +161,27 @@ func main() {
 
 		yuvFrame := make([]byte, len(Y)+len(uDownsampled)+len(vDownsampled))
 
+		// 이제YUV 값을 바이트 슬라이스에 저장해야한다.
+		// 데이터 압축률을 높이기 위해 모든 Y값을 먼저 저장하고,
+		// 그 다음 모든 U값, 그리고 모든 V 값을 저장한다. 이를 평면 형식이라고 한다.
+		// 직관적으로, 인접한 Y, U, V 값은 같은 픽셀에서의 Y, U, V값 자체보다 유사할 가능성이 더 높다.
+		// 따라서 구성 요소를 평면 형식으로 저장하면 나중에 더 많은 데이터를 저장 할 수 있다.
+		copy(yuvFrame, Y)
+		copy(yuvFrame[len(Y):], uDownsampled)
+		copy(yuvFrame[len(Y)+len(uDownsampled):], vDownsampled)
+
+		frames[i] = yuvFrame
+	}
+
+	// 이제 공간이 절반으로 줄어든 YUV로 인코딩된 비디오가 생겼다.
+
+	yuvSize := size(frames)
+	log.Printf("YUV420P size: %d bytes (%0.2f%% original size)", yuvSize, 100*float32(yuvSize)/float32(rawSize))
+
+	// ffplay로 재생할 수 있는 파일에도 쓸 수 있다.
+	// ffplay -f rawvideo -pixel_format yuv420p -video_size 384x216 -framerate 25 encoded.yuv
+	if err := os.WriteFile("encoded.yuv", bytes.Join(frames, nil), 0644); err != nil {
+		log.Fatal(err)
 	}
 
 }
