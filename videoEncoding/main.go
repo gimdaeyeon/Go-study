@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"compress/flate"
 	"flag"
 	"io"
 	"log"
@@ -183,6 +184,98 @@ func main() {
 	if err := os.WriteFile("encoded.yuv", bytes.Join(frames, nil), 0644); err != nil {
 		log.Fatal(err)
 	}
+
+	encoded := make([][]byte, len(frames))
+	for i := range frames {
+		// 다음으로 각 프레임 사이의 델타를 계산하여 데이터를 단순화 한다.
+		// 많은 경우 프레임 사이의 픽셀은 크게 변하지 않는다. 따라서 델타의 대부분은 작다.
+		// 이러한 작은 델타를 더 효율적으로 저장할 수 있다.
+
+		// 물론 첫 번째 프레임에는 이전 프레임이 없으므로 전체를 저장한다.
+		// 이를 키프레임라고 한다. 실제로 키프레임은 주기적으로 계산되며 메타데이터에 구분되어 있다.
+		// 키프레임을 압축할 수도 있지만, 나중에 다루겠다.
+		// 인코더에서는 (관례에 따라) 프레임 0을 키프레임으로 지정한다.
+
+		// 나머지 프레임은 이전 프레임을 기준으로 델타를 적용한다.
+		// 이를 예측 프레임이라고 하며 P-프레임이라고도 한다.
+
+		if i == 0 {
+			encoded[i] = frames[i]
+			continue
+		}
+
+		delta := make([]byte, len(frames[i]))
+		for j := 0; j < len(delta); j++ {
+			delta[j] = frames[i][j] - frames[i-1][j]
+		}
+
+		// 이제 델타 프레임이 있는데, 출력해 보면 0이 여러 개 포함되어 있다.
+		// 이런 0 값들은 압축하기에 매우 적합하므로, 우리는 이를 run length 인코딩으로 압축할것이다.
+		// 이는 값이 반복되는 횟수를 저장한 후 값을 저장하는 간단한 알고리즘이다.
+
+		// 예를 들어, 시퀀스 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0은 4, 0, 12, 1, 4, 0으로 저장된다.
+		// run length 인코딩은 최신 코덱에서는 더 이상 사용되지 않지만, 좋은 연습이며
+		// 압축이라는 목표를 달성하기에 충분하다.
+
+		var rle []byte
+		for j := 0; j < len(delta); {
+			// 현재 값이 반복되는 횟수를 센다.
+			var count byte
+			for count = 0; count < 255 && j+int(count) < len(delta) && delta[j+int(count)] == delta[j]; count++ {
+			}
+
+			// 개수와 값을 저장한다.
+			rle = append(rle, count)
+			rle = append(rle, delta[j])
+
+			j += int(count)
+		}
+
+		// RLE 프레임을 저장한다.
+		encoded[i] = rle
+	}
+
+	rleSize := size(encoded)
+	log.Printf("RLE size: %d bytes (%0.2f%% original size)", rleSize, 100*float32(rleSize)/float32(rawSize))
+
+	// 원본 영상 크기의 1/4까지 줄였다. 하지만 더 줄일 수도 있다.
+	// 가장 긴 run이 대부분 0으로 채워져 있다는 점에 주목해보자
+	// 프레임간 델타가 보통 작기 때문이다.
+
+	// 여기서 어떤 압축 알고리즘을 쓰느냐에 대한 선택 여지가 있지만,
+	// 예제를 단순하게 유지하기 위해 표준 라이브러리에 들어 있는
+	// DEFLATE 알고리즘을 사용해보자
+	// (DEFLATE 구현 코드는 이 시연 범위를 넘어가므로 자세히 다루지는 않음)
+
+	var deflated bytes.Buffer
+	w, err := flate.NewWriter(&deflated, flate.BestCompression)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	for i := range frames {
+		if i == 0 {
+			// 이 프레임이 키프레임이므로, 원본 프레임을 그대로 기록합니다.
+			if _, err := w.Write(frames[i]); err != nil {
+				log.Fatal(err)
+			}
+			continue
+		}
+
+		delta := make([]byte, len(frames[i]))
+		for j := 0; j < len(delta); j++ {
+			delta[j] = frames[i][j] - frames[i-1][j]
+		}
+		if _, err := w.Write(delta); err != nil {
+			log.Fatal(err)
+		}
+	}
+	if err := w.Close(); err != nil {
+		log.Fatal(err)
+	}
+
+	deflatedSize := deflated.Len()
+	log.Printf("DEFLATE size %d bytes (%0.2f%% original size)", deflatedSize, 100*float32(deflatedSize)/float32(rawSize))
 
 }
 
