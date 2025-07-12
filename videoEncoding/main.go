@@ -277,6 +277,61 @@ func main() {
 	deflatedSize := deflated.Len()
 	log.Printf("DEFLATE size %d bytes (%0.2f%% original size)", deflatedSize, 100*float32(deflatedSize)/float32(rawSize))
 
+	// DEFLATE단계는 실행하는데 시간이 오래걸린다.
+	// 일반적으로 인코더는 디코더보다 훨씬 느리게 실행되는 경향이 있다.
+	// 이는 비디오 코덱뿐만 아니라 대부분의 압축 알고리즘에도 해당한다.
+	// 인코더가 데이터를 분석하고 압축 방법을 결정하기 위해 많은 작업을 수행해야하기 때문이다.
+	// 반면 디코더는 데이터를 읽고 인코더와 반대되는 작업을 수행하는 단순한 루프이다.
+
+	// 여담이지만, 일반적인 JPEG 압축률이 90% 정도라면
+	//  ‘차라리 모든 프레임을 JPEG로 인코딩하면 되지 않을까?’ 하고 생각할 수 있다.
+	// 맞는 말이긴 하지만, 우리가 위에서 제시한 알고리즘은 JPEG보다 훨씬 단순하다.
+
+	// 또한, DEFLATE 알고리즘은 데이터의 2차원성을 활용하지 않으므로 효율적이지 않다.
+	// 실제 환경에서 비디오 코덱은 여기서 구현한 것보다 훨씬 복잡하다.
+	// 코덱은 데이터의 2차원성을 활용하고, 더욱 정교한 알고리즘을 사용하며,
+	// 실행되는 하드웨어에 최적화되어있다.
+	//  예를 들어, H264 코덱은 많은 최신 GPU하드웨어에 구현되어 있다.
+
+	// 이제 인코딩된 비디오가 있으니, 디코딩하여 어떤 결과가 나오는지 확인해보자
+
+	// 먼저 DEFLATE 스트림을 디코딩한다.
+	var inflated bytes.Buffer
+	r := flate.NewReader(&deflated)
+	if _, err := io.Copy(&inflated, r); err != nil {
+		log.Fatal(err)
+	}
+	if err := r.Close(); err != nil {
+		log.Fatal(err)
+	}
+
+	// 압축해제된 스트림을 프레임 단위로 나눈다.
+	decodedFrames := make([][]byte, 0)
+	for {
+		frame := make([]byte, width*height*3/2)
+		if _, err := io.ReadFull(&inflated, frame); err != nil {
+			if err == io.EOF {
+				break
+			}
+			log.Fatal(err)
+		}
+		decodedFrames = append(decodedFrames, frame)
+	}
+
+	// 첫 번째 프레임을 제외한 모든 프레임에 대해 이전 프레임을  델타 프레임에 추가해야한다.
+	// 이는 인코더에서 수행한 작업과 반대이다.
+	for i := range decodedFrames {
+		if i == 0 {
+			continue
+		}
+		for j := 0; j < len(decodedFrames[i]); j++ {
+			decodedFrames[i][j] += decodedFrames[i-1][j]
+		}
+	}
+	if err := os.WriteFile("decoded.yuv", bytes.Join(decodedFrames, nil), 0644); err != nil {
+		log.Fatal(err)
+	}
+
 }
 
 func size(frames [][]byte) int {
