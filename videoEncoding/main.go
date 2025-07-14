@@ -20,8 +20,10 @@ import (
 // 이 프로젝트에서는 "최적의" 인코딩 방식에 얽매이지 않고
 // 비디오 인코딩의 핵심 개념에 집중하기 위함이다.
 
-// 코드를 실행
-//   cat video.rgb24 | go run main.go
+// 코드 실행
+// cat video.rgb24 | go run main.go
+// 결과 재생
+// ffplay -f rawvideo -pixel_format rgb24 -video_size 384x216 -framerate 25 decoded.rgb24
 
 func main() {
 	var width, height int
@@ -332,6 +334,44 @@ func main() {
 		log.Fatal(err)
 	}
 
+	// 다음으로 각 YUV 프레임을 RGB로 변환한다.
+	for i, frame := range decodedFrames {
+		Y := frame[:width*height]
+		U := frame[width*height : width*height+width*height/4]
+		V := frame[width*height+width*height/4:]
+
+		rgb := make([]byte, 0, width*height*3)
+		for j := 0; j < height; j++ {
+			for k := 0; k < width; k++ {
+				y := float64(Y[j*width+k])
+				u := float64(U[(j/2)*(width/2)+(k/2)]) - 128
+				v := float64(V[(j/2)*(width/2)+(k/2)]) - 128
+
+				r := clamp(y+1.402*v, 0, 255)
+				g := clamp(y-0.344*u-0.714*v, 0, 255)
+				b := clamp(y+1.772*u, 0, 255)
+
+				rgb = append(rgb, uint8(r), uint8(g), uint8(b))
+			}
+		}
+		decodedFrames[i] = rgb
+	}
+
+	// 마지막으로, 디코딩된 비디오를 파일에 작성한다.
+	// 이 비디오는 다음 ffplay로 재생할 수 있다.
+	// ffplay -f rawvideo -pixel_format rgb24 -video_size 384x216 -framerate 25 decoded.rgb24
+	out, err := os.Create("decoded.rgb24")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer out.Close()
+
+	for i := range decodedFrames {
+		if _, err := out.Write(decodedFrames[i]); err != nil {
+			log.Fatal(err)
+		}
+	}
+
 }
 
 func size(frames [][]byte) int {
@@ -340,4 +380,14 @@ func size(frames [][]byte) int {
 		size += len(frame)
 	}
 	return size
+}
+
+func clamp(x, min, max float64) float64 {
+	if x < min {
+		return min
+	}
+	if x > max {
+		return max
+	}
+	return x
 }
